@@ -14,21 +14,22 @@
     </script>
     <style>
         :root {
-            --key-count: 37; 
+            --key-count: 36; /* Default visible keys */
             --white-width: calc(95vw / var(--key-count));
             --white-height: calc(var(--white-width) * 4);
             --black-width: calc(var(--white-width) * 0.65);
             --black-height: calc(var(--white-height) * 0.6);
             --accent: #ffffff;
-            --bg-dark: #1e272e;
+            --main-bg: #0f0f0f;
+            --panel-bg: #1e272e;
         }
 
         body {
-            background-color: #0f0f0f; color: #eee;
+            background-color: var(--main-bg); color: #eee;
             font-family: 'Segoe UI', system-ui, sans-serif; margin: 0;
             height: 100vh; display: flex; flex-direction: column;
             align-items: center; justify-content: center; overflow: hidden;
-            touch-action: none; /* Prevent Pull-to-refresh on mobile */
+            touch-action: none; transition: background-color 0.3s;
         }
 
         /* --- PIANO WRAPPERS --- */
@@ -58,7 +59,7 @@
         .header { text-align: center; margin-bottom: 2rem; transition: all 0.5s ease; width: 100%; display: flex; flex-direction: column; align-items: center; z-index: 10; }
         .header.hidden { opacity: 0; pointer-events: none; transform: translateY(-50px); }
         
-        h1 { font-weight: 800; letter-spacing: 0.2rem; margin: 0 0 15px 0; font-size: 2.5vw; color: var(--accent); }
+        h1 { font-weight: 800; letter-spacing: 0.2rem; margin: 0 0 15px 0; font-size: 2.5vw; color: var(--accent); transition: color 0.3s; }
 
         .controls-container {
             display: flex;
@@ -130,9 +131,9 @@
             box-shadow: 0 0 40px rgba(0,0,0,0.5);
         }
 
-        .modal-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .modal-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px; flex-wrap: wrap; justify-content: center; }
         .tab-btn { background: none; border: none; color: #666; cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 5px 15px; }
-        .tab-btn.active { color: white; border-bottom: 2px solid white; }
+        .tab-btn.active { color: white; border-bottom: 2px solid var(--accent); }
 
         .section-title { color: #888; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; margin: 20px 0 10px 0; text-align: left; }
 
@@ -143,12 +144,12 @@
             transition: 0.2s; text-align: center; font-weight: bold; color: #ccc;
         }
         .preset-opt:hover { background: #333; }
-        .preset-opt.selected { border-color: white; color: white; background: rgba(255, 255, 255, 0.1); }
+        .preset-opt.selected { border-color: var(--accent); color: white; background: rgba(255, 255, 255, 0.1); }
 
         .fx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left; }
         .fx-control { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; text-align: left; }
         .fx-control label { font-size: 0.7rem; color: #888; text-transform: uppercase; display: flex; justify-content: space-between; }
-        .fx-control input { width: 100%; cursor: pointer; accent-color: #fff; height: 5px; }
+        .fx-control input { width: 100%; cursor: pointer; accent-color: var(--accent); height: 5px; }
         
         .close-modal { margin-top: 25px; background: #333; color: white; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; }
 
@@ -176,18 +177,23 @@
             border-top: 4px solid #333; transition: transform 0.5s ease;
             z-index: 10;
             touch-action: none; /* Critical for dragging */
+            overflow-x: hidden; /* Hide scrollbar, clip content */
+            max-width: 95vw;
+            justify-content: center; /* Center keys if they fit, otherwise align start naturally due to flex behavior with overflow */
         }
+
         .key { 
             position: relative; cursor: pointer; user-select: none; 
             transition: transform 0.05s, background 0.1s; 
             -webkit-tap-highlight-color: transparent;
             touch-action: none;
+            flex-shrink: 0; /* Prevent squishing */
         }
         .white {
             width: var(--white-width); height: var(--white-height); background: #fff;
             border: 1px solid #aaa; z-index: 1; border-radius: 0 0 5px 5px;
             display: flex; align-items: flex-end; justify-content: center;
-            padding-bottom: 10px; color: #444; font-size: 0.8vw; font-weight: bold;
+            padding-bottom: 10px; color: #444; font-size: calc(var(--white-width) * 0.3); font-weight: bold;
         }
         .black {
             width: var(--black-width); height: var(--black-height);
@@ -195,15 +201,19 @@
             border: 1px solid #000; z-index: 2;
             margin-left: calc(var(--black-width) / -2); margin-right: calc(var(--black-width) / -2);
             border-radius: 0 0 4px 4px; display: flex; align-items: flex-end; justify-content: center;
-            padding-bottom: 8px; color: #fff; font-size: 0.6vw;
+            padding-bottom: 8px; color: #fff; font-size: calc(var(--black-width) * 0.4);
         }
-        .key.active { background: #ddd !important; transform: scale(0.98); box-shadow: 0 0 15px white; color: black; }
+        .key.active { background: #ddd !important; transform: scale(0.98); box-shadow: 0 0 15px var(--accent); color: black; }
+        
         .fullscreen-btn { position: fixed; bottom: 20px; left: 20px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.2); color: #666; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 0.7rem; z-index: 100; }
         .roll-toggle-btn { position: fixed; bottom: 20px; right: 20px; background: #222; border: 1px solid #444; color: white; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; font-weight: bold; z-index: 100; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
         .roll-toggle-btn:hover { background: #333; }
         .falling-toggle-btn { position: fixed; bottom: 20px; right: 150px; background: #222; border: 1px solid #444; color: white; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; font-weight: bold; z-index: 100; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
         .falling-toggle-btn:hover { background: #333; }
         .hint { margin-top: 2rem; color: #555; font-size: 0.9rem; letter-spacing: 1px; }
+        
+        /* Learning Mode Specifics */
+        .waiting-for-note { background: #f1c40f !important; box-shadow: 0 0 20px #f1c40f; z-index: 10; }
     </style>
 </head>
 <body>
@@ -222,12 +232,13 @@
                 <div class="controls">
                     <div style="display: flex; flex-direction: column; width: 80px; gap: 2px;">
                         <label style="font-size: 0.6rem; color: #aaa; text-transform: uppercase; font-weight: bold; display: flex; justify-content: space-between;">Vol <span id="vol-val">50%</span></label>
-                        <input type="range" min="0" max="100" value="50" oninput="setVolume(this.value)" style="width: 100%; height: 5px; accent-color: #fff; cursor: pointer;">
+                        <input type="range" min="0" max="100" value="50" oninput="setVolume(this.value)" style="width: 100%; height: 5px; accent-color: var(--accent); cursor: pointer;">
                     </div>
                     <div style="width: 1px; height: 20px; background: #444;"></div>
                     
                     <button id="gliss-btn" class="btn-ui settings-btn" onclick="toggleGliss()">GLISS: OFF</button>
                     <button id="chord-btn" class="btn-ui settings-btn" onclick="toggleChordMode()">CHORD: OFF</button>
+                    <button id="shiftlock-btn" class="btn-ui settings-btn" onclick="toggleShiftLock()">SHIFT LOCK: OFF</button>
                     <button id="label-btn" class="btn-ui settings-btn" onclick="toggleLabels()">LABELS: KEY</button>
                     
                     <div style="width: 1px; height: 20px; background: #444;"></div>
@@ -370,8 +381,10 @@
     <div id="settings-modal">
         <div class="modal-content">
             <div class="modal-tabs">
-                <button class="tab-btn active" onclick="switchTab('source')">Sound Source</button>
+                <button class="tab-btn active" onclick="switchTab('source')">Sound</button>
                 <button class="tab-btn" onclick="switchTab('effects')">Effects</button>
+                <button class="tab-btn" onclick="switchTab('appearance')">Appearance</button>
+                <button class="tab-btn" onclick="switchTab('learning')">Learning</button>
             </div>
 
             <div id="tab-source">
@@ -424,6 +437,39 @@
                     <label>Reverb Level</label>
                     <input type="range" min="0" max="1" step="0.05" value="0.0" oninput="updateFX('reverb', this.value)">
                 </div>
+            </div>
+
+            <div id="tab-appearance" style="display:none;">
+                <div class="section-title">Theme</div>
+                <div class="fx-grid">
+                    <div class="fx-control">
+                        <label>Accent Color</label>
+                        <input type="color" value="#ffffff" onchange="setThemeColor(this.value)" style="height: 30px; padding: 0;">
+                    </div>
+                    <div class="fx-control">
+                        <label>Background</label>
+                        <input type="color" value="#0f0f0f" onchange="setBgColor(this.value)" style="height: 30px; padding: 0;">
+                    </div>
+                </div>
+                <button class="btn-ui settings-btn" style="width: 100%; margin-top: 10px;" onclick="resetTheme()">RESET TO DEFAULT</button>
+
+                <div class="section-title">Display</div>
+                <div class="fx-control">
+                    <label>Piano Size (Zoom): <span id="size-val">Medium</span></label>
+                    <!-- Inverse logic: More keys = smaller keys (zoom out) -->
+                    <input type="range" min="10" max="88" value="36" oninput="setPianoSize(this.value)">
+                </div>
+            </div>
+
+            <div id="tab-learning" style="display:none;">
+                <div class="section-title">Practice Tools</div>
+                <div class="fx-control" style="flex-direction: row; align-items: center; justify-content: space-between;">
+                    <label style="margin: 0;">Learning Mode (Wait for Note)</label>
+                    <button id="learning-toggle-btn" class="btn-ui settings-btn" onclick="toggleLearningMode()">OFF</button>
+                </div>
+                <p style="font-size: 0.8rem; color: #888; margin-top: 10px; line-height: 1.4;">
+                    When enabled, MIDI/MuseScore playback will pause at every note and wait for you to press the correct key before continuing.
+                </p>
             </div>
 
             <div class="close-modal" onclick="toggleModal(false)">CLOSE</div>
@@ -502,6 +548,9 @@
         let lastPlayedFreq = 0;
         let chordMode = false;
         let labelMode = 'key'; // 'key' or 'note'
+        let shiftLockActive = false;
+        let learningMode = false;
+        let waitingForNote = null;
         
         // --- MOUSE TRACKING ---
         let isMouseDown = false;
@@ -512,8 +561,11 @@
         const KEYBOARD_LAYOUT = ['1','!','2','@','3','4','$','5','%','6','^','7','8','*','9','(','0','q','Q','w','W','e','E','r','t','T','y','Y','u','i','I','o','O','p','P','a','s','S','d','D','f','g','G','h','H','j','J','k','l','L','z','Z','x','c','C','v','V','b','B','n','m'];
 
         const PIANO_NOTES = [];
-        for (let oct = 2; oct <= 7; oct++) {
-            NOTE_NAMES.forEach(n => PIANO_NOTES.push({ note: n + oct, type: n.includes('#') ? 'black' : 'white' }));
+        // Generate full 88 keys (A0 to C8)
+        // A0 is MIDI 21. C8 is MIDI 108.
+        for (let i = 21; i <= 108; i++) {
+            const note = getNoteNameFromMidi(i);
+            PIANO_NOTES.push({ note: note, type: note.includes('#') ? 'black' : 'white', midi: i });
         }
 
         // --- SAMPLE LOADING LOGIC ---
@@ -521,12 +573,18 @@
         const noteMap = { 'C#': 'Db', 'D#': 'Eb', 'F#': 'Gb', 'G#': 'Ab', 'A#': 'Bb' };
         
         function loadPianoSamples() {
-            const rangeStart = 2; 
-            const rangeEnd = 7;
+            // Load Full Range A0 (Octave 0) to C8 (Octave 8)
+            const rangeStart = 0; 
+            const rangeEnd = 8;
             for(let o = rangeStart; o <= rangeEnd; o++) {
                 NOTE_NAMES.forEach(n => {
                     let fileNote = n;
                     if(n.includes('#')) fileNote = noteMap[n];
+                    
+                    // Skip invalid notes below A0 and above C8
+                    const midiNum = getMidiNumber(n + o);
+                    if (midiNum < 21 || midiNum > 108) return;
+
                     const fileName = `${fileNote}${o}`;
                     const url = `https://raw.githubusercontent.com/fuhton/piano-mp3/master/piano-mp3/${fileName}.mp3`;
                     const key = n + o;
@@ -534,7 +592,7 @@
                         .then(response => response.arrayBuffer())
                         .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
                         .then(audioBuffer => { pianoSamples[key] = audioBuffer; })
-                        .catch(e => console.log("Sample missing: " + key));
+                        .catch(e => console.log("Sample missing or not loaded: " + key));
                 });
             }
         }
@@ -547,8 +605,10 @@
         let currentTab = 'source';
         function switchTab(tab) {
             currentTab = tab;
-            document.getElementById('tab-source').style.display = tab === 'source' ? 'block' : 'none';
-            document.getElementById('tab-effects').style.display = tab === 'effects' ? 'block' : 'none';
+            const tabs = ['source', 'effects', 'appearance', 'learning'];
+            tabs.forEach(t => {
+                document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+            });
             document.querySelectorAll('#settings-modal .tab-btn').forEach(b => b.classList.remove('active'));
             event.target.classList.add('active');
         }
@@ -575,10 +635,53 @@
             btn.style.background = chordMode ? '#9b59b6' : '#444';
         }
 
+        function toggleShiftLock() {
+            shiftLockActive = !shiftLockActive;
+            const btn = document.getElementById('shiftlock-btn');
+            btn.innerText = `SHIFT LOCK: ${shiftLockActive ? 'ON' : 'OFF'}`;
+            btn.style.background = shiftLockActive ? '#e74c3c' : '#444';
+        }
+
+        function toggleLearningMode() {
+            learningMode = !learningMode;
+            const btn = document.getElementById('learning-toggle-btn');
+            btn.innerText = learningMode ? 'ON' : 'OFF';
+            btn.style.background = learningMode ? '#2ecc71' : '#555';
+            // Reset state
+            waitingForNote = null;
+            if(!learningMode) {
+                // Remove visual cues
+                document.querySelectorAll('.key').forEach(k => k.classList.remove('waiting-for-note'));
+            }
+        }
+
         function toggleLabels() {
             labelMode = (labelMode === 'key') ? 'note' : 'key';
             document.getElementById('label-btn').innerText = `LABELS: ${labelMode.toUpperCase()}`;
             renderPiano();
+        }
+
+        // --- APPEARANCE SETTINGS ---
+        function setThemeColor(color) {
+            document.documentElement.style.setProperty('--accent', color);
+        }
+
+        function setBgColor(color) {
+            document.documentElement.style.setProperty('--main-bg', color);
+        }
+
+        function resetTheme() {
+            document.documentElement.style.setProperty('--accent', '#ffffff');
+            document.documentElement.style.setProperty('--main-bg', '#0f0f0f');
+            document.querySelector('#tab-appearance input[type="color"]').value = '#ffffff';
+            document.querySelectorAll('#tab-appearance input[type="color"]')[1].value = '#0f0f0f';
+        }
+
+        function setPianoSize(val) {
+            // val is key count. Low val = Big keys (Zoom In). High val = Small keys (Zoom Out)
+            document.documentElement.style.setProperty('--key-count', val);
+            const label = val < 25 ? "Zoomed In" : (val > 60 ? "Zoomed Out" : "Medium");
+            document.getElementById('size-val').innerText = label + ` (${val})`;
         }
 
         function setWave(type, el) {
@@ -634,6 +737,22 @@
             const el = document.querySelector(`[data-note="${midiName}"]`);
             const noteKey = manualKey || midiName;
             
+            // --- LEARNING MODE CHECK ---
+            // If this call comes from user input (manualKey is set and not "midi_...")
+            const isUser = manualKey && !manualKey.toString().startsWith("midi_");
+            
+            if (isUser && learningMode && waitingForNote) {
+                const playedMidi = getMidiNumber(midiName);
+                const targetMidi = waitingForNote.midi + transpose; // Check transposed target
+                
+                if (playedMidi === targetMidi) {
+                    waitingForNote.userPlayed = true;
+                    waitingForNote.played = true; // Mark as played so auto-player skips it
+                    waitingForNote = null; // Stop waiting
+                    if(el) el.classList.remove('waiting-for-note');
+                }
+            }
+
             // Prevent playing same note twice unless it's a re-trigger
             if (activeNotes.has(noteKey)) return;
 
@@ -645,7 +764,7 @@
                 
                 activeVisualNotes.set(noteKey, {
                     x: rect.left,
-                    y: rect.top, // Bottom of rect starts at Key Top
+                    y: rect.top, 
                     w: rect.width,
                     h: 0,
                     active: true,
@@ -653,13 +772,11 @@
                 });
             }
 
-            // CHORD LOGIC: Only trigger chords if this is the primary note (isSecondary = false)
+            // CHORD LOGIC
             if (chordMode && !isSecondary) {
                 const rootMidi = getMidiNumber(midiName);
                 const majorThird = getNoteNameFromMidi(rootMidi + 4);
                 const perfectFifth = getNoteNameFromMidi(rootMidi + 7);
-                
-                // Play chords with unique keys so they can be stopped individually
                 playNoteInternal(majorThird, `${noteKey}_chord1`, true);
                 playNoteInternal(perfectFifth, `${noteKey}_chord2`, true);
             }
@@ -670,7 +787,7 @@
             let startFreq = freq;
             let doGliss = false;
 
-            // GLISS LOGIC: Only gliss primary notes
+            // GLISS LOGIC
             if (glissMode && !isSecondary && activeNotes.size > 0 && lastPlayedFreq > 0) {
                 startFreq = lastPlayedFreq;
                 doGliss = true;
@@ -725,10 +842,7 @@
         }
 
         function stopNoteInternal(manualKey) {
-            // Stop Main Note
             stopNoteSound(manualKey);
-            
-            // Stop Potential Chord Notes
             if (chordMode) {
                 stopNoteSound(`${manualKey}_chord1`);
                 stopNoteSound(`${manualKey}_chord2`);
@@ -736,11 +850,9 @@
         }
 
         function stopNoteSound(key) {
-            // Piano Roll Logic - Release Note
             if(activeVisualNotes.has(key)) {
                 const n = activeVisualNotes.get(key);
                 n.active = false;
-                // Add to released list to keep floating up
                 fallingVisualNotes.push(n);
                 activeVisualNotes.delete(key);
             }
@@ -770,51 +882,60 @@
 
         function renderPiano() {
             const p = document.getElementById('piano'); p.innerHTML = '';
-            PIANO_NOTES.slice(0, 62).forEach((n, i) => {
+            // Render full 88 keys logic
+            // To make "center" visible initially, we can scroll
+            // Note: KEYBOARD_LAYOUT is mapped relative to C2 (Index 15 in PIANO_NOTES)
+            // PIANO_NOTES[0] is A0 (21). C2 is 36. Index = 36-21 = 15.
+            
+            PIANO_NOTES.forEach((n, i) => {
                 const d = document.createElement('div');
-                const char = KEYBOARD_LAYOUT[i - transpose] || '';
+                
+                // Determine label
+                // Start Mapping at C2 (index 15)
+                const startMapIndex = 15; 
+                const layoutIndex = i - startMapIndex - transpose;
+                
+                const char = (layoutIndex >= 0 && layoutIndex < KEYBOARD_LAYOUT.length) ? KEYBOARD_LAYOUT[layoutIndex] : '';
+                
                 d.className = `key ${n.type}`; 
                 d.id = char ? `key-${char}` : `n-${i}`;
                 
-                // Label Logic
                 let label = char;
                 if(labelMode === 'note') label = n.note;
                 
                 d.innerHTML = `<span>${label}</span>`; 
                 d.dataset.note = n.note;
                 
-                // --- MOUSE INTERACTIONS ---
+                // MOUSE
                 d.addEventListener('mousedown', (e) => {
                     e.preventDefault();
                     isMouseDown = true;
-                    // Use unique ID for mouse so it doesn't conflict with key presses
                     playNoteInternal(n.note, `mouse_${n.note}`);
                 });
-
                 d.addEventListener('mouseup', () => {
                     isMouseDown = false;
                     stopNoteInternal(`mouse_${n.note}`);
                 });
-
                 d.addEventListener('mouseenter', () => {
-                    if(isMouseDown) {
-                        playNoteInternal(n.note, `mouse_${n.note}`);
-                    }
+                    if(isMouseDown) playNoteInternal(n.note, `mouse_${n.note}`);
                 });
-
                 d.addEventListener('mouseleave', () => {
-                    if(isMouseDown) {
-                        stopNoteInternal(`mouse_${n.note}`);
-                    }
+                    if(isMouseDown) stopNoteInternal(`mouse_${n.note}`);
                 });
 
                 p.appendChild(d);
             });
+            
+            // Auto-scroll to middle C on load
+            setTimeout(() => {
+               const c4 = document.querySelector('[data-note="C4"]');
+               if(c4) c4.scrollIntoView({ inline: "center", behavior: "auto" });
+            }, 100);
         }
 
-        // --- GLOBAL TOUCH HANDLER (For Swiping/Multitouch) ---
+        // --- GLOBAL TOUCH ---
         const pianoContainer = document.getElementById('piano');
-        const activeTouchNotes = new Map(); // touchIdentifier -> noteName
+        const activeTouchNotes = new Map(); 
 
         pianoContainer.addEventListener('touchstart', (e) => {
             e.preventDefault();
@@ -840,14 +961,12 @@
                 
                 if (key) {
                     const newNote = key.dataset.note;
-                    // If finger moved to a new key
                     if (newNote !== prevNote) {
-                        if (prevNote) stopNoteInternal(`touch_${touch.identifier}`); // Stop old
-                        playNoteInternal(newNote, `touch_${touch.identifier}`); // Play new
+                        if (prevNote) stopNoteInternal(`touch_${touch.identifier}`);
+                        playNoteInternal(newNote, `touch_${touch.identifier}`);
                         activeTouchNotes.set(touch.identifier, newNote);
                     }
                 } else {
-                    // Finger dragged off keys
                     if (prevNote) {
                         stopNoteInternal(`touch_${touch.identifier}`);
                         activeTouchNotes.delete(touch.identifier);
@@ -881,7 +1000,7 @@
         });
 
         function changeTranspose(amt) {
-            transpose = Math.max(-12, Math.min(12, transpose + amt));
+            transpose = Math.max(-24, Math.min(24, transpose + amt));
             document.getElementById('transpose-val').innerText = transpose;
             renderPiano();
         }
@@ -904,7 +1023,7 @@
             });
         }
 
-        // --- BACKGROUND AUDIO VISUALIZER ---
+        // --- VISUALIZER ---
         let vizActive = false;
         let vizAnimId;
         const canvas = document.getElementById('visualizer-canvas');
@@ -915,7 +1034,6 @@
             const btn = document.querySelector('.viz-btn');
             btn.innerText = `VISUALIZER: ${vizActive ? 'ON' : 'OFF'}`;
             btn.style.background = vizActive ? '#9b59b6' : '#8e44ad';
-            
             if(vizActive) {
                 document.getElementById('visualizer-canvas').style.opacity = 1;
                 drawVisualizer();
@@ -928,51 +1046,44 @@
 
         function drawVisualizer() {
             if(!vizActive) return;
-            
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
-
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
             const barWidth = (canvas.width / bufferLength) * 2.5;
             let barHeight;
             let x = 0;
-
             for(let i = 0; i < bufferLength; i++) {
                 barHeight = dataArray[i] * 2;
-                
-                // Color based on height
                 const r = barHeight + (25 * (i/bufferLength));
                 const g = 250 * (i/bufferLength);
                 const b = 50;
-
                 ctx.fillStyle = `rgb(${r},${g},${b})`;
                 ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-
                 x += barWidth + 1;
             }
-
             vizAnimId = requestAnimationFrame(drawVisualizer);
         }
 
-        // --- PIANO ROLL LOGIC (RISING) ---
+        // --- PIANO ROLL & FALLING NOTES ---
         let pianoRollActive = false;
-        let rollAnimId;
+        let fallingModeActive = false;
+        let rollAnimId, fallingAnimId;
         const rollCanvas = document.getElementById('piano-roll-canvas');
         const rollCtx = rollCanvas.getContext('2d');
+        const fallCanvas = document.getElementById('falling-notes-canvas');
+        const fallCtx = fallCanvas.getContext('2d');
         const activeVisualNotes = new Map();
-        const fallingVisualNotes = []; // These are actually "floating away" notes
+        const fallingVisualNotes = [];
         const ROLL_SPEED = 5;
+        const FALL_SPEED_PIXELS_PER_SEC = 300;
 
         function togglePianoRoll() {
-            if (fallingModeActive) toggleFallingMode(); // Mutually exclusive visualizers
+            if (fallingModeActive) toggleFallingMode();
             pianoRollActive = !pianoRollActive;
             const header = document.getElementById('header');
-            
             if(pianoRollActive) {
                 header.classList.add('hidden');
                 rollCanvas.style.opacity = 1;
@@ -989,18 +1100,15 @@
 
         function rollLoop() {
             if(!pianoRollActive) return;
-            
             rollCanvas.width = window.innerWidth;
             rollCanvas.height = window.innerHeight;
             rollCtx.clearRect(0, 0, rollCanvas.width, rollCanvas.height);
-
             activeVisualNotes.forEach(n => {
                 n.h += ROLL_SPEED;
                 n.y -= ROLL_SPEED; 
                 rollCtx.fillStyle = n.color;
                 rollCtx.fillRect(n.x, n.y, n.w, n.h);
             });
-
             for (let i = fallingVisualNotes.length - 1; i >= 0; i--) {
                 const n = fallingVisualNotes[i];
                 n.y -= ROLL_SPEED;
@@ -1013,18 +1121,10 @@
             rollAnimId = requestAnimationFrame(rollLoop);
         }
 
-        // --- FALLING NOTES VISUALIZER (SYNTHESIA STYLE) ---
-        let fallingModeActive = false;
-        let fallingAnimId;
-        const fallCanvas = document.getElementById('falling-notes-canvas');
-        const fallCtx = fallCanvas.getContext('2d');
-        const FALL_SPEED_PIXELS_PER_SEC = 300; // Speed of falling notes
-
         function toggleFallingMode() {
-            if (pianoRollActive) togglePianoRoll(); // Mutually exclusive
+            if (pianoRollActive) togglePianoRoll();
             fallingModeActive = !fallingModeActive;
             const header = document.getElementById('header');
-            
             if (fallingModeActive) {
                 header.classList.add('hidden');
                 fallCanvas.style.opacity = 1;
@@ -1039,90 +1139,43 @@
 
         function fallingLoop() {
             if (!fallingModeActive) return;
-
             fallCanvas.width = window.innerWidth;
             fallCanvas.height = window.innerHeight;
             fallCtx.clearRect(0, 0, fallCanvas.width, fallCanvas.height);
 
-            // Only draw if MIDI is loaded and scheduled
-            if (scheduledNotes.length > 0) {
-                const now = audioCtx.currentTime - midiStartTime; // Time since playback started
-                // If not playing, use 0 or last pause time? Simple playback tracking:
-                // Need to adjust 'now' based on tempo scale if playing
-                // The global 'midiStartTime' works when isPlayingMidi is true.
-                
-                // Let's rely on global 'isPlayingMidi' and 'midiStartTime' variables from MIDI section
-                
-                if (isPlayingMidi) {
-                    const tempoScale = 1 / parseFloat(document.getElementById('midi-tempo').value);
-                    const currentSongTime = (audioCtx.currentTime - midiStartTime) / tempoScale;
-                    
-                    // Look ahead window (e.g., 3 seconds)
-                    const lookAhead = 3.0; 
-                    
-                    // Find Target Y (Top of keys)
-                    // We can approximate or find a key element
-                    const keyEl = document.querySelector('.white');
-                    const targetY = keyEl ? keyEl.getBoundingClientRect().top : window.innerHeight - 100;
+            if (scheduledNotes.length > 0 && isPlayingMidi) {
+                const tempoScale = 1 / parseFloat(document.getElementById('midi-tempo').value);
+                const currentSongTime = (audioCtx.currentTime - midiStartTime) / tempoScale;
+                const lookAhead = 3.0; 
+                const keyEl = document.querySelector('.white');
+                const targetY = keyEl ? keyEl.getBoundingClientRect().top : window.innerHeight - 100;
 
-                    for (let i = 0; i < scheduledNotes.length; i++) {
-                        const note = scheduledNotes[i];
+                for (let i = 0; i < scheduledNotes.length; i++) {
+                    const note = scheduledNotes[i];
+                    if (note.time > currentSongTime - 0.2 && note.time < currentSongTime + lookAhead) {
+                        const timeDiff = note.time - currentSongTime;
+                        const y = targetY - (timeDiff * FALL_SPEED_PIXELS_PER_SEC);
+                        const height = Math.max(10, note.duration * FALL_SPEED_PIXELS_PER_SEC);
+                        const visualMidi = note.midi + transpose;
                         
-                        // Check if note is in visible window
-                        if (note.time > currentSongTime - 0.2 && note.time < currentSongTime + lookAhead) {
-                            
-                            // Calculate Y position
-                            // timeDiff = time until impact. positive = future.
-                            const timeDiff = note.time - currentSongTime;
-                            
-                            // Y = TargetY - (timeDiff * Speed)
-                            // If timeDiff is 0, Y = TargetY (Hit)
-                            // If timeDiff is 1, Y = TargetY - Speed (Above)
-                            const y = targetY - (timeDiff * FALL_SPEED_PIXELS_PER_SEC);
-                            const height = Math.max(10, note.duration * FALL_SPEED_PIXELS_PER_SEC);
-                            
-                            // Calculate X and Width based on MIDI Note
-                            // We need to map MIDI note -> Screen Position
-                            // Account for transpose visually? Yes.
-                            const visualMidi = note.midi + transpose;
-                            
-                            // Find the key index in PIANO_NOTES
-                            // Formula: index = visualMidi - (StartNoteMidi?)
-                            // Our PIANO_NOTES array starts at... let's check
-                            // C2 is index 0. C2 is MIDI 36.
-                            const startMidi = 36; // C2
-                            const keyIndex = visualMidi - startMidi;
-                            
-                            if (keyIndex >= 0 && keyIndex < PIANO_NOTES.length) {
-                                // Find specific DOM element to get exact coords
-                                // PIANO_NOTES[keyIndex] corresponds to n-index ID
-                                const elId = `n-${keyIndex}`; // IDs generated in renderPiano as n-{i} if no char
-                                // But keys might have char IDs.
-                                // Actually renderPiano sets id based on char if exists, else n-{i}
-                                // Safe bet: Select by data-note?
-                                // PIANO_NOTES store note names (e.g. C#4).
-                                const noteObj = PIANO_NOTES[keyIndex];
-                                if (noteObj) {
-                                    // Construct selector
-                                    const domKey = document.querySelector(`[data-note="${noteObj.note}"]`);
-                                    if (domKey) {
-                                        const rect = domKey.getBoundingClientRect();
-                                        
-                                        // Color
-                                        const isBlack = noteObj.type === 'black';
-                                        fallCtx.fillStyle = isBlack ? '#e74c3c' : '#3498db';
-                                        
-                                        // Draw Note Bar
-                                        // Draw rising up from the scheduled hit time (visual length goes UP)
-                                        fallCtx.fillRect(rect.left, y - height, rect.width, height);
-                                    }
+                        // Find screen position. Since full 88 keys, we map 21 -> index 0
+                        const keyIndex = visualMidi - 21;
+                        if (keyIndex >= 0 && keyIndex < PIANO_NOTES.length) {
+                            const domKey = document.getElementById(`n-${keyIndex}`) || document.querySelector(`[data-note="${PIANO_NOTES[keyIndex].note}"]`);
+                            if (domKey) {
+                                const rect = domKey.getBoundingClientRect();
+                                const isBlack = PIANO_NOTES[keyIndex].type === 'black';
+                                fallCtx.fillStyle = isBlack ? '#e74c3c' : '#3498db';
+                                // In learning mode, if waiting for this note, change color
+                                if (learningMode && waitingForNote === note) {
+                                    fallCtx.fillStyle = '#f1c40f'; // Gold color for waiting
                                 }
+                                fallCtx.fillRect(rect.left, y - height, rect.width, height);
                             }
                         }
                     }
                 }
             }
-
             fallingAnimId = requestAnimationFrame(fallingLoop);
         }
 
@@ -1725,7 +1778,7 @@
             midiStartTime = audioCtx.currentTime - midiPauseTime;
             
             if (midiPauseTime === 0) {
-                scheduledNotes.forEach(n => { n.played = false; n.stopped = false; });
+                scheduledNotes.forEach(n => { n.played = false; n.stopped = false; n.userPlayed = false; });
             }
             
             playbackLoop();
@@ -1734,22 +1787,64 @@
         function playbackLoop() {
             if (!isPlayingMidi) return;
             const tempoScale = 1 / parseFloat(document.getElementById('midi-tempo').value);
-            const elapsed = (audioCtx.currentTime - midiStartTime) / tempoScale;
-            scheduledNotes.forEach(note => {
-                if (!note.played && elapsed >= note.time) {
-                    const currentMidi = note.midi + transpose;
-                    const noteIndex = (currentMidi % 12 + 12) % 12;
-                    const octave = Math.floor(currentMidi / 12) - 1;
-                    const transposedName = NOTE_NAMES[noteIndex] + octave;
+            let elapsed = (audioCtx.currentTime - midiStartTime) / tempoScale;
 
-                    playNoteInternal(transposedName, "midi_" + note.midi + note.time);
+            // --- LEARNING MODE LOGIC ---
+            if (learningMode) {
+                const nextNote = scheduledNotes.find(n => !n.played);
+                if (nextNote) {
+                    if (elapsed >= nextNote.time) {
+                        if (!nextNote.userPlayed) {
+                            // Freeze time
+                            const desiredElapsed = nextNote.time;
+                            midiStartTime = audioCtx.currentTime - (desiredElapsed * tempoScale);
+                            elapsed = desiredElapsed;
+                            
+                            // Set Global Wait
+                            waitingForNote = nextNote;
+                            
+                            // Visual Cue: Highlight key
+                            const targetMidi = nextNote.midi + transpose;
+                            const keyIndex = targetMidi - 21;
+                            const domKey = document.getElementById(`n-${keyIndex}`) || document.querySelector(`[data-note="${PIANO_NOTES[keyIndex]?.note}"]`);
+                            if(domKey) domKey.classList.add('waiting-for-note');
+                        } else {
+                            waitingForNote = null;
+                        }
+                    }
+                }
+            }
+
+            scheduledNotes.forEach(note => {
+                // If learning mode, do NOT auto-play the note we are waiting for.
+                // If userPlayed is true, sound was already triggered by user.
+                if (learningMode && note === waitingForNote && !note.userPlayed) return;
+
+                if (!note.played && elapsed >= note.time) {
+                    // Only auto-play audio if NOT in learning mode
+                    // OR if in learning mode but it's an accompaniment track (future feature?)
+                    // For now, if learning mode is ON, and user hasn't played it, we skip auto-audio 
+                    // because we paused time until they played it.
+                    // If userPlayed is true, they made sound. 
+                    
+                    if (!learningMode) {
+                        const currentMidi = note.midi + transpose;
+                        const noteIndex = (currentMidi % 12 + 12) % 12;
+                        const octave = Math.floor(currentMidi / 12) - 1;
+                        const transposedName = NOTE_NAMES[noteIndex] + octave;
+                        playNoteInternal(transposedName, "midi_" + note.midi + note.time);
+                    }
+                    
                     note.played = true;
                 }
+                
+                // Stop logic
                 if (!note.stopped && elapsed >= (note.time + note.duration)) {
-                    stopNoteInternal("midi_" + note.midi + note.time);
+                    if (!learningMode) stopNoteInternal("midi_" + note.midi + note.time);
                     note.stopped = true;
                 }
             });
+
             if (scheduledNotes.length > 0 && scheduledNotes.every(n => n.stopped)) { resetMidiPlayback(); return; }
             midiAnimationId = requestAnimationFrame(playbackLoop);
         }
@@ -1768,11 +1863,12 @@
             cancelAnimationFrame(midiAnimationId);
             document.getElementById('play-midi').innerText = "PLAY";
             activeNotes.forEach((v, k) => { if(k.toString().startsWith("midi_")) stopNoteInternal(k); });
-            scheduledNotes.forEach(n => { n.played = false; n.stopped = false; });
-            if(currentMidi) document.getElementById('midi-status').innerText = "Ready to play";
+            scheduledNotes.forEach(n => { n.played = false; n.stopped = false; n.userPlayed = false; });
+            waitingForNote = null;
+            document.querySelectorAll('.waiting-for-note').forEach(k => k.classList.remove('waiting-for-note'));
         }
 
-        // --- KEYBOARD AUTO PLAYER LOGIC ---
+        // --- AUTO PLAYER KEYBOARD ---
         let autoSheet = [];
         let autoIdx = 0;
 
@@ -1786,7 +1882,7 @@
                 autoSheet.push(group);
             }
             autoIdx = 0;
-            document.getElementById('auto-status').innerText = `Loaded ${autoSheet.length} steps. Press [ or ] to play.`;
+            document.getElementById('auto-status').innerText = `Loaded ${autoSheet.length} steps.`;
         });
 
         document.getElementById('reset-auto').addEventListener('click', () => {
@@ -1825,8 +1921,27 @@
                 playNextStep();
                 return;
             }
-            const el = document.getElementById(`key-${e.key}`);
-            if (el) playNoteInternal(el.dataset.note, e.key);
+
+            let char = e.key;
+            let index = KEYBOARD_LAYOUT.indexOf(char);
+
+            // Shift+Key Logic
+            if (index === -1) {
+                const lowerChar = char.toLowerCase();
+                const lowerIndex = KEYBOARD_LAYOUT.indexOf(lowerChar);
+                if (lowerIndex !== -1) index = lowerIndex + 1;
+            } else if (shiftLockActive) {
+                if ((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9')) index = index + 1;
+            }
+
+            if (index >= 0 && index < KEYBOARD_LAYOUT.length) {
+                // Map keyboard layout to C2 (Index 15)
+                const noteIndex = 15 + index + transpose;
+                if(noteIndex >= 0 && noteIndex < PIANO_NOTES.length) {
+                    const noteObj = PIANO_NOTES[noteIndex];
+                    playNoteInternal(noteObj.note, e.key);
+                }
+            }
         });
 
         window.addEventListener('keyup', (e) => {
