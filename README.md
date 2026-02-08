@@ -1,0 +1,1 @@
+you can just download the html file itself, no need to download the libraries folder, everything runs off of the libraries. unless youre going to be using this without internet, no need to download that.
