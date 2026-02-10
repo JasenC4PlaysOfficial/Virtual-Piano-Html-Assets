@@ -468,7 +468,7 @@
                     <button id="learning-toggle-btn" class="btn-ui settings-btn" onclick="toggleLearningMode()">OFF</button>
                 </div>
                 <p style="font-size: 0.8rem; color: #888; margin-top: 10px; line-height: 1.4;">
-                    When enabled, MIDI/MuseScore playback will pause at every note and wait for you to press the correct key before continuing.
+                    When enabled, MIDI/MuseScore playback will pause at every note/chord and wait for you to press ALL correct keys before continuing.
                 </p>
             </div>
 
@@ -550,7 +550,7 @@
         let labelMode = 'key'; // 'key' or 'note'
         let shiftLockActive = false;
         let learningMode = false;
-        let waitingForNote = null;
+        let waitingForNotes = []; // Changed from single variable to array
         
         // --- MOUSE TRACKING ---
         let isMouseDown = false;
@@ -648,7 +648,7 @@
             btn.innerText = learningMode ? 'ON' : 'OFF';
             btn.style.background = learningMode ? '#2ecc71' : '#555';
             // Reset state
-            waitingForNote = null;
+            waitingForNotes = [];
             if(!learningMode) {
                 // Remove visual cues
                 document.querySelectorAll('.key').forEach(k => k.classList.remove('waiting-for-note'));
@@ -741,15 +741,28 @@
             // If this call comes from user input (manualKey is set and not "midi_...")
             const isUser = manualKey && !manualKey.toString().startsWith("midi_");
             
-            if (isUser && learningMode && waitingForNote) {
+            if (isUser && learningMode && waitingForNotes.length > 0) {
                 const playedMidi = getMidiNumber(midiName);
-                const targetMidi = waitingForNote.midi + transpose; // Check transposed target
                 
-                if (playedMidi === targetMidi) {
-                    waitingForNote.userPlayed = true;
-                    waitingForNote.played = true; // Mark as played so auto-player skips it
-                    waitingForNote = null; // Stop waiting
-                    if(el) el.classList.remove('waiting-for-note');
+                // Check against ALL waiting notes
+                waitingForNotes.forEach(note => {
+                    if (!note.userPlayed) {
+                        const targetMidi = note.midi + transpose;
+                        if (playedMidi === targetMidi) {
+                            note.userPlayed = true;
+                            note.played = true; // Mark played
+                        }
+                    }
+                });
+                
+                // Check if all are done, if so clear visual cues
+                const pending = waitingForNotes.filter(n => !n.userPlayed);
+                if (pending.length === 0) {
+                    waitingForNotes = [];
+                    document.querySelectorAll('.waiting-for-note').forEach(k => k.classList.remove('waiting-for-note'));
+                } else {
+                     // Keep highlighting only pending ones
+                     if(el) el.classList.remove('waiting-for-note');
                 }
             }
 
@@ -1166,8 +1179,10 @@
                                 const rect = domKey.getBoundingClientRect();
                                 const isBlack = PIANO_NOTES[keyIndex].type === 'black';
                                 fallCtx.fillStyle = isBlack ? '#e74c3c' : '#3498db';
+                                
                                 // In learning mode, if waiting for this note, change color
-                                if (learningMode && waitingForNote === note) {
+                                // Check if this note is in the waiting list
+                                if (learningMode && waitingForNotes.includes(note)) {
                                     fallCtx.fillStyle = '#f1c40f'; // Gold color for waiting
                                 }
                                 fallCtx.fillRect(rect.left, y - height, rect.width, height);
@@ -1452,6 +1467,10 @@
         function parseMidiTracks() {
             scheduledNotes = [];
             currentMidi.tracks.forEach(track => {
+                // Filter out unpitched percussion (drums) to avoid random piano notes
+                // Pitched percussion (marimba, xylophone, etc.) are melodic and will remain
+                if (track.instrument && track.instrument.percussion) return;
+
                 track.notes.forEach(note => {
                     scheduledNotes.push({ 
                         time: note.time, 
@@ -1489,9 +1508,20 @@
                     return parseFloat(str) || 0;
                 }
 
-                function getDuration(node) {
+                function getDuration(node, currentRatio = 1.0) {
                     let val = 0;
-                    // Try durationType
+                    
+                    // Priority 1: Check Explicit Duration (z/n) - Source of truth for Tuplets
+                    const durTag = node.getElementsByTagName("duration")[0];
+                    if (durTag) {
+                        const z = durTag.getAttribute("z");
+                        const n = durTag.getAttribute("n");
+                        if (z && n) {
+                             return parseFloat(z) / parseFloat(n);
+                        }
+                    }
+
+                    // Priority 2: Fallback to nominal duration type (quarter, eighth, etc.)
                     const typeTag = node.getElementsByTagName("durationType")[0];
                     if (typeTag) {
                         const type = typeTag.textContent;
@@ -1503,22 +1533,16 @@
                         val = map[type] || 0;
                     }
                     
-                    // Fallback to explicit duration fraction
-                    if (val === 0 || (typeTag && typeTag.textContent === 'measure')) {
-                        const durTag = node.getElementsByTagName("duration")[0];
+                    // Fallback to explicit duration text content if no attributes/type
+                    if (val === 0) {
                         if (durTag) {
-                            const z = durTag.getAttribute("z");
-                            const n = durTag.getAttribute("n");
-                            if (z && n) val = parseFloat(z) / parseFloat(n);
-                            else {
-                                val = parseFraction(durTag.textContent) || val;
-                            }
+                            val = parseFraction(durTag.textContent) || val;
                         }
                     }
 
-                    // Handle Dots
+                    // Handle Dots (Only if we used the nominal type map)
                     const dots = node.getElementsByTagName("dots")[0];
-                    if (dots && val > 0) {
+                    if (dots && val > 0 && !durTag?.getAttribute("z")) {
                         const count = parseInt(dots.textContent);
                         let adder = val;
                         for (let i = 0; i < count; i++) {
@@ -1527,17 +1551,100 @@
                         }
                     }
                     
+                    // APPLY TUPLET RATIO IF EXPLICIT FRACTION WAS MISSING
+                    // If we used the nominal type (quarter) but are in a triplet (2/3), apply ratio.
+                    if (val > 0 && currentRatio !== 1.0 && (!durTag || !durTag.getAttribute("z"))) {
+                        val = val * currentRatio;
+                    }
+
                     return val;
                 }
 
-                // Parse Tempo
-                let bpm = 120;
-                const tempos = xmlDoc.getElementsByTagName("Tempo");
-                if (tempos.length > 0) {
-                    const tVal = parseFloat(tempos[0].getElementsByTagName("tempo")[0]?.textContent);
-                    if (tVal) bpm = tVal * 60; 
+                // --- ROBUST TEMPO MAP BUILDER ---
+                // 1. First Pass: Find Max Measures and Collect Tempo/TimeSig Events globally
+                let maxMeasures = 0;
+                const tempoEvents = {}; // mIndex -> bpm
+                const timeSigEvents = {}; // mIndex -> fraction (measure length in wholes)
+                
+                const allStaves = xmlDoc.getElementsByTagName("Staff");
+                
+                // Helper to scan a staff for structural events
+                function scanStaffForStructure(staff) {
+                    const measures = staff.getElementsByTagName("Measure");
+                    if (measures.length > maxMeasures) maxMeasures = measures.length;
+                    
+                    for (let i = 0; i < measures.length; i++) {
+                        const m = measures[i];
+                        
+                        // Look for Tempo tags anywhere in this measure (descendants)
+                        const tempos = m.getElementsByTagName("Tempo");
+                        if (tempos.length > 0) {
+                            const t = tempos[tempos.length - 1]; // Take last one in measure
+                            const val = parseFloat(t.getElementsByTagName("tempo")[0]?.textContent);
+                            if (!isNaN(val)) {
+                                tempoEvents[i] = val * 60; // Convert to BPM
+                            }
+                        }
+                        
+                        // Look for Measure Length (TimeSig or explicit len)
+                        // Prioritize <len> (actual duration) over <TimeSig> (nominal).
+                        const lenTag = m.getElementsByTagName("len")[0];
+                        if (lenTag) {
+                            timeSigEvents[i] = parseFraction(lenTag.textContent);
+                        } else if (timeSigEvents[i] === undefined) {
+                            // Fallback to TimeSig if no len tag recorded yet
+                            const sigs = m.getElementsByTagName("TimeSig");
+                            if (sigs.length > 0) {
+                                const n = parseFloat(sigs[0].getElementsByTagName("sigN")[0]?.textContent) || 4;
+                                const d = parseFloat(sigs[0].getElementsByTagName("sigD")[0]?.textContent) || 4;
+                                timeSigEvents[i] = n / d;
+                            }
+                        }
+                    }
                 }
-                const secondsPerWhole = 240 / bpm; 
+
+                // Scan all staves to build composite structure
+                for (let staff of allStaves) {
+                    scanStaffForStructure(staff);
+                }
+                
+                // 2. Build Linear Time Map
+                const measureTimeMap = [];
+                let currentBpm = 120;
+                
+                // Check Global Score Tempo (if measure 0 doesn't have one)
+                if (tempoEvents[0] === undefined) {
+                    const scoreTempos = xmlDoc.getElementsByTagName("Tempo");
+                    if (scoreTempos.length > 0) {
+                        const val = parseFloat(scoreTempos[0].getElementsByTagName("tempo")[0]?.textContent);
+                        if (!isNaN(val)) currentBpm = val * 60;
+                    }
+                }
+
+                let globalTime = 0;
+                
+                // Safety: Ensure at least 100 measures if none found (empty file?)
+                if (maxMeasures === 0) maxMeasures = 100;
+
+                for (let i = 0; i < maxMeasures; i++) {
+                    if (tempoEvents[i] !== undefined) currentBpm = tempoEvents[i];
+                    
+                    const secondsPerWhole = 240 / currentBpm; // (60 / bpm) * 4
+                    const measureLen = timeSigEvents[i] !== undefined ? timeSigEvents[i] : 1.0; // Default 4/4 = 1.0
+                    
+                    measureTimeMap.push({
+                        startTime: globalTime,
+                        secondsPerWhole: secondsPerWhole
+                    });
+                    
+                    globalTime += (measureLen * secondsPerWhole);
+                }
+                
+                // Add infinite tail to prevent index out of bounds errors during note parsing
+                const lastMap = measureTimeMap[measureTimeMap.length - 1] || { startTime: 0, secondsPerWhole: 2 };
+                for (let k = 0; k < 50; k++) measureTimeMap.push(lastMap);
+                
+                // --- END TEMPO MAP ---
 
                 // Parse Instruments/Staves
                 const parts = xmlDoc.getElementsByTagName("Part");
@@ -1594,55 +1701,95 @@
                     const id = staff.getAttribute("id");
                     if (staffMap[id] && staffMap[id].isDrum) continue;
 
-                    let currentTime = 0; // relative to whole notes
+                    // TIE TRACKER: Map<VoiceIndex, Map<Pitch, NoteObject>>
+                    const voiceTies = {};
 
                     const measures = staff.getElementsByTagName("Measure");
-                    for (let measure of measures) {
-                        const voices = measure.getElementsByTagName("voice");
-                        let maxVoiceLen = 0;
+                    for (let mIndex = 0; mIndex < measures.length; mIndex++) {
+                        const measure = measures[mIndex];
+                        const measureInfo = measureTimeMap[mIndex] || measureTimeMap[measureTimeMap.length-1];
 
-                        for (let voice of voices) {
-                            let voiceTime = currentTime;
+                        const voices = measure.getElementsByTagName("voice");
+
+                        for (let vIdx = 0; vIdx < voices.length; vIdx++) {
+                            const voice = voices[vIdx];
+                            
+                            // Ensure tie map exists for this voice
+                            if (!voiceTies[vIdx]) voiceTies[vIdx] = {};
+
+                            let currentMeasureOffset = 0; // In Wholes
                             const children = voice.children;
-                            let currentVoiceLen = 0;
+                            let currentTupletRatio = 1.0;
 
                             for (let node of children) {
+                                // TUPLET RATIO DETECTION
+                                if (node.tagName === "Tuplet") {
+                                    const norm = parseFloat(node.getElementsByTagName('normalNotes')[0]?.textContent);
+                                    const act = parseFloat(node.getElementsByTagName('actualNotes')[0]?.textContent);
+                                    if (norm && act) currentTupletRatio = norm / act; 
+                                }
+                                if (node.tagName === "endTuplet") { 
+                                    currentTupletRatio = 1.0; 
+                                }
+
                                 if (node.tagName === "Chord" || node.tagName === "Rest") {
-                                    const duration = getDuration(node);
+                                    // Pass currentTupletRatio to calculation
+                                    const duration = getDuration(node, currentTupletRatio);
                                     
                                     if (node.tagName === "Chord") {
                                         const notes = node.getElementsByTagName("Note");
                                         for (let note of notes) {
                                             const pitch = parseInt(note.getElementsByTagName("pitch")[0]?.textContent);
                                             if (pitch) {
-                                                const absStart = voiceTime * secondsPerWhole;
-                                                const absDur = duration * secondsPerWhole;
+                                                // CALCULATE ABSOLUTE TIME USING MEASURE MAP
+                                                const absStart = measureInfo.startTime + (currentMeasureOffset * measureInfo.secondsPerWhole);
+                                                const absDur = duration * measureInfo.secondsPerWhole;
                                                 
-                                                scheduledNotes.push({
-                                                    time: absStart,
-                                                    duration: absDur,
-                                                    midi: pitch,
-                                                    name: "",
-                                                    played: false,
-                                                    stopped: false
-                                                });
+                                                // Check for Tie start tag (Spanner or Tie)
+                                                const hasTieStart = note.getElementsByTagName("Tie").length > 0 || note.getElementsByTagName("Spanner").length > 0;
+                                                
+                                                // TIE LOGIC: MERGE INTO PREVIOUS IF EXISTS AND CONTIGUOUS
+                                                let merged = false;
+                                                if (voiceTies[vIdx][pitch]) {
+                                                    const prevNote = voiceTies[vIdx][pitch];
+                                                    // Check if this note starts where the previous ended (with small epsilon for floating point)
+                                                    if (Math.abs((prevNote.time + prevNote.duration) - absStart) < 0.05) {
+                                                        // Merge! Extend duration.
+                                                        prevNote.duration += absDur;
+                                                        merged = true;
+                                                        
+                                                        // If this note continues the tie, keep in map. If not, remove.
+                                                        if (!hasTieStart) {
+                                                            delete voiceTies[vIdx][pitch];
+                                                        }
+                                                    } else {
+                                                        // Not contiguous (broken tie?), treat as new.
+                                                        delete voiceTies[vIdx][pitch];
+                                                    }
+                                                }
+                                                
+                                                if (!merged) {
+                                                    const newNote = {
+                                                        time: absStart,
+                                                        duration: absDur,
+                                                        midi: pitch,
+                                                        name: "",
+                                                        played: false,
+                                                        stopped: false
+                                                    };
+                                                    scheduledNotes.push(newNote);
+                                                    
+                                                    // If this note starts a tie, track it
+                                                    if (hasTieStart) {
+                                                        voiceTies[vIdx][pitch] = newNote;
+                                                    }
+                                                }
                                             }
                                         }
                                     }
-                                    voiceTime += duration;
-                                    currentVoiceLen += duration;
+                                    currentMeasureOffset += duration;
                                 }
                             }
-                            if (currentVoiceLen > maxVoiceLen) maxVoiceLen = currentVoiceLen;
-                        }
-                        // Default fallback
-                        currentTime += (maxVoiceLen || 0.25); // Default to quarter note if fail?
-                        // Better: check measure len tag if voice fails
-                        if (maxVoiceLen === 0) {
-                             // try measure len
-                             const lenTag = measure.getElementsByTagName("len")[0];
-                             if(lenTag) currentTime += parseFraction(lenTag.textContent);
-                             else currentTime += 1; // 4/4 default
                         }
                     }
                 }
@@ -1789,27 +1936,42 @@
             const tempoScale = 1 / parseFloat(document.getElementById('midi-tempo').value);
             let elapsed = (audioCtx.currentTime - midiStartTime) / tempoScale;
 
-            // --- LEARNING MODE LOGIC ---
+            // --- LEARNING MODE LOGIC (REVISED FOR CHORDS) ---
             if (learningMode) {
-                const nextNote = scheduledNotes.find(n => !n.played);
-                if (nextNote) {
-                    if (elapsed >= nextNote.time) {
-                        if (!nextNote.userPlayed) {
-                            // Freeze time
-                            const desiredElapsed = nextNote.time;
+                // 1. Identify if any unplayed note needs to be played NOW
+                // Find the earliest unplayed note time
+                const nextUnplayed = scheduledNotes.find(n => !n.played);
+                
+                if (nextUnplayed) {
+                    // Check if we reached this time
+                    if (elapsed >= nextUnplayed.time) {
+                        
+                        // Gather ALL notes at this approximate time (use 50ms epsilon for chord grouping)
+                        // This fixes the "one by one" issue by treating anything within 50ms as "simultaneous"
+                        const chordNotes = scheduledNotes.filter(n => Math.abs(n.time - nextUnplayed.time) < 0.05);
+                        
+                        // Check if ANY of them are not userPlayed
+                        const pendingUser = chordNotes.filter(n => !n.userPlayed);
+                        
+                        if (pendingUser.length > 0) {
+                            // FREEZE TIME
+                            const desiredElapsed = nextUnplayed.time;
                             midiStartTime = audioCtx.currentTime - (desiredElapsed * tempoScale);
                             elapsed = desiredElapsed;
                             
-                            // Set Global Wait
-                            waitingForNote = nextNote;
+                            // Set global waiting list
+                            waitingForNotes = pendingUser;
                             
-                            // Visual Cue: Highlight key
-                            const targetMidi = nextNote.midi + transpose;
-                            const keyIndex = targetMidi - 21;
-                            const domKey = document.getElementById(`n-${keyIndex}`) || document.querySelector(`[data-note="${PIANO_NOTES[keyIndex]?.note}"]`);
-                            if(domKey) domKey.classList.add('waiting-for-note');
+                            // Visual Cue: Highlight ALL keys in the chord
+                            pendingUser.forEach(note => {
+                                const targetMidi = note.midi + transpose;
+                                const keyIndex = targetMidi - 21;
+                                const domKey = document.getElementById(`n-${keyIndex}`) || document.querySelector(`[data-note="${PIANO_NOTES[keyIndex]?.note}"]`);
+                                if(domKey) domKey.classList.add('waiting-for-note');
+                            });
                         } else {
-                            waitingForNote = null;
+                            // All notes in this chord are played! Proceed.
+                            waitingForNotes = [];
                         }
                     }
                 }
@@ -1818,14 +1980,14 @@
             scheduledNotes.forEach(note => {
                 // If learning mode, do NOT auto-play the note we are waiting for.
                 // If userPlayed is true, sound was already triggered by user.
-                if (learningMode && note === waitingForNote && !note.userPlayed) return;
+                
+                // CRITICAL: In learning mode, we must NOT mark 'played=true' until the USER plays it.
+                // The loop above handles freezing. If we are frozen, elapsed is stuck at note.time.
+                // We only enter here if we are NOT frozen (meaning user played everything).
+                
+                if (learningMode && waitingForNotes.includes(note)) return;
 
                 if (!note.played && elapsed >= note.time) {
-                    // Only auto-play audio if NOT in learning mode
-                    // OR if in learning mode but it's an accompaniment track (future feature?)
-                    // For now, if learning mode is ON, and user hasn't played it, we skip auto-audio 
-                    // because we paused time until they played it.
-                    // If userPlayed is true, they made sound. 
                     
                     if (!learningMode) {
                         const currentMidi = note.midi + transpose;
@@ -1864,7 +2026,7 @@
             document.getElementById('play-midi').innerText = "PLAY";
             activeNotes.forEach((v, k) => { if(k.toString().startsWith("midi_")) stopNoteInternal(k); });
             scheduledNotes.forEach(n => { n.played = false; n.stopped = false; n.userPlayed = false; });
-            waitingForNote = null;
+            waitingForNotes = [];
             document.querySelectorAll('.waiting-for-note').forEach(k => k.classList.remove('waiting-for-note'));
         }
 
